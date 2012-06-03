@@ -13,6 +13,7 @@ public class KMST extends AbstractKMST {
 
 	private PriorityQueue<Edge> edges;
 	private Vertex[] vertices;
+ 	private int[][] adjMatrix;
 	private int k;
 	private int numEdges;
 	private int numNodes;
@@ -38,8 +39,14 @@ public class KMST extends AbstractKMST {
 		this.numEdges = numEdges;
 		this.edges = new PriorityQueue<Edge>(edges);
 		this.vertices = new Vertex[numNodes];
+		int[][] adjMatrix = new int[numNodes][numNodes];
 
-		for (Edge e : edges) {
+		for(Edge e : edges) {
+			adjMatrix[e.node1][e.node2] = e.weight;
+			adjMatrix[e.node2][e.node1] = e.weight;
+		}
+
+		for(Edge e : edges) {
 			if(vertices[e.node1] == null) {
 				vertices[e.node1] = new Vertex(e.node1);
 			}
@@ -48,6 +55,17 @@ public class KMST extends AbstractKMST {
 			}
 			vertices[e.node1].add(e);
 			vertices[e.node2].add(e);
+		}
+
+		for(int i=0; i<numNodes; i++) {
+			for(int j=0; j<numNodes; j++) {
+				System.out.print(adjMatrix[i][j]+"\t");
+			}
+			System.out.print("\n");
+		}
+
+		for(Vertex v : vertices) {
+			System.out.println(v.node + " " +v);
 		}
 	}
 
@@ -77,57 +95,73 @@ public class KMST extends AbstractKMST {
 			fixedVertices.set(e.node2); 
 
             allowedEdges = new PriorityQueue<Edge>();
-			for( Edge x : vertices[e.node1]) {
-				if(!(allowedEdges.contains(x)) && !(fixedEdges.contains(x))) {
+			for(Edge x : vertices[e.node1]) {
+				if(!(allowedEdges.contains(x)) && !(x.equals(e))) {
 					allowedEdges.add(x);
 				}
 			}
-			for( Edge x : vertices[e.node2]) {
-				if(!(allowedEdges.contains(x)) && !(fixedEdges.contains(x))) {
+			for(Edge x : vertices[e.node2]) {
+				if(!(allowedEdges.contains(x)) && !(x.equals(e))) {
 					allowedEdges.add(x);
 				}
 			}
 
 			int lowerBound = e.weight;
 			forbiddenEdges = new HashSet<Edge>();
-			p(fixedEdges, fixedVertices, allowedEdges, forbiddenEdges, lowerBound); 
+			p(fixedEdges, fixedVertices, allowedEdges, forbiddenEdges, lowerBound, 2); 
 		}
 		System.out.println(i);
-		//setSolution(0, null);
-		//System.out.println(getSolution().getBestSolution());
-		//System.out.println(getSolution().getUpperBound());
-		/*
-		for(Edge e : allowedEdges) {
-			System.out.println(e);
-		}
-		*/
 	}
 
-	/**
-	 *
-	 */
-	private void p(HashSet<Edge> fixedEdges, BitSet fixedVertices, PriorityQueue<Edge> allowedEdges, HashSet<Edge> forbiddenEdges, int lowerBound) {
-	   	//System.out.println(fixedEdges);
-	   	//System.out.println(fixedVertices);
-	   	//System.out.println(allowedEdges);
-	   	//System.out.println(forbiddenEdges);
-	   	//System.out.println(lowerBound + "\n");
+	private void p() {
+		/*
+		  
+		// Bounding
+		// berechne für P' lokale untere Schranke L' mit Dualheuristik;
+		// Fall L' >= U bracht nicht weiter verfolgt werden!
+		if(L' <= U) {
+			// berechne für P' gültige heur. Lösung -> obere Schranke U';
+			if(U' < U) {
+				U = U'; // neue beste Lösung gefunden
+				// entferne alle Subprobleme mit lokaler unterer Schranke >= U;
+			}
+			// Fall L' >= U braucht nicht weiter verfolgt werden!
+			if(L' < U) {
+				// Branching
+				// partitioniere P' in Teilprobleme P1, P2;
+				// p(P1);
+				// p(P2);
+			}
+		}
 
-		if(lowerBound >= upperBound) {
+		*/
+
+	}
+
+	private void p(HashSet<Edge> fixedEdges, BitSet fixedVertices, PriorityQueue<Edge> allowedEdges, HashSet<Edge> forbiddenEdges, int lowerBound, int size) {
+
+		/*if(lowerBound >= upperBound) {
 			// Cut
 			return;
-		}
-		if(fixedEdges.size() == k-1) {
+		}*/
+		if(size == k) {
 			// Lösung gefunden..
 			// System.out.println(fixedEdges + " " + lowerBound);
-			setSolution(lowerBound, fixedEdges);
+			HashSet<Edge> t = new HashSet<Edge>(fixedEdges);
+			setSolution(lowerBound, t);
 			upperBound = lowerBound;
+
+			System.out.println(fixedEdges);
+			System.out.println(fixedVertices);
+			System.out.println(allowedEdges);
+			System.out.println(forbiddenEdges);
+			System.out.println(lowerBound + "\n");
+
 			return;
 		}
 		Edge e;
 		while((e = allowedEdges.poll()) != null) {
 			HashSet<Edge> fixedEdges2 = new HashSet<Edge>(fixedEdges);
-			// System.out.println(fixedEdges2);
 			fixedEdges2.add(e);
 
 			int lowerBound2 = lowerBound;
@@ -141,10 +175,12 @@ public class KMST extends AbstractKMST {
 
 			PriorityQueue<Edge> allowedEdges2 = new PriorityQueue<Edge>(allowedEdges);
 			allowedEdges2.remove(e);
+			// Problem: kanten die kreise bilden befinden sich noch in allowedEdges
 
 			boolean n1 = fixedVertices2.get(e.node1);
 			boolean n2 = fixedVertices2.get(e.node2);
 
+			// Neu hinzugekommenen Knoten bestimmen
 			Vertex v = null;
 			if(n1) {
 				v = vertices[e.node2];
@@ -152,15 +188,22 @@ public class KMST extends AbstractKMST {
 			else if(n2) {
 				v = vertices[e.node1];
 			}
+
 			for( Edge x : v) {
 				i++;
 				// kante erlaubt?
 				if(!forbiddenEdges.contains(x) && !(fixedEdges.contains(x))) {
 					boolean x1 = fixedVertices2.get(x.node1);
 					boolean x2 = fixedVertices2.get(x.node2);
+
 					// entsteht ein kreis?
 					if(!(x1 && x2)) {
+						// Kante wird zur Front hinzugefügt
 						allowedEdges2.add(x);
+					}
+					else {
+						// Durch den neuen Knoten würde durch diese Kante ein Kreis entstehen
+						allowedEdges2.remove(x);
 					}
 				}
 			}
@@ -168,8 +211,8 @@ public class KMST extends AbstractKMST {
 			HashSet<Edge> forbiddenEdges2 = new HashSet<Edge>(forbiddenEdges);
 			forbiddenEdges2.add(e);
 
-			p(fixedEdges2, fixedVertices2, allowedEdges2, forbiddenEdges, lowerBound2);
-			p(fixedEdges, fixedVertices, allowedEdges, forbiddenEdges2, lowerBound);
+			p(fixedEdges2, fixedVertices2, allowedEdges2, forbiddenEdges, lowerBound2, size+1);
+			p(fixedEdges, fixedVertices, allowedEdges, forbiddenEdges2, lowerBound, size);
 		}
 	}
 }
