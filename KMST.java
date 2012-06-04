@@ -17,8 +17,8 @@ public class KMST extends AbstractKMST {
 	private int k;
 	private int numEdges;
 	private int numNodes;
-	private int i = 0;
 	private int upperBound = Integer.MAX_VALUE;
+	private int i = 0;
 
 	/**
 	 * Der Konstruktor. Hier ist die richtige Stelle f&uuml;r die
@@ -41,11 +41,17 @@ public class KMST extends AbstractKMST {
 		this.vertices = new Vertex[numNodes];
 		int[][] adjMatrix = new int[numNodes][numNodes];
 
+        /*
+         * Adjazenzmatrix erstellen
+         */
 		for(Edge e : edges) {
 			adjMatrix[e.node1][e.node2] = e.weight;
 			adjMatrix[e.node2][e.node1] = e.weight;
 		}
 
+        /*
+         * Adjazenzliste (=Liste von Edges) erstellen
+         */
 		for(Edge e : edges) {
 			if(vertices[e.node1] == null) {
 				vertices[e.node1] = new Vertex(e.node1);
@@ -57,15 +63,18 @@ public class KMST extends AbstractKMST {
 			vertices[e.node2].add(e);
 		}
 
+        /*
+         * Ausgabe
+         */
 		for(int i=0; i<numNodes; i++) {
 			for(int j=0; j<numNodes; j++) {
-				System.out.print(adjMatrix[i][j]+"\t");
+				Main.printDebug(adjMatrix[i][j]+"\t");
 			}
-			System.out.print("\n");
+			Main.printDebug("\n");
 		}
 
 		for(Vertex v : vertices) {
-			System.out.println(v.node + " " +v);
+			Main.printDebug(v.node + " " +v);
 		}
 	}
 
@@ -80,36 +89,6 @@ public class KMST extends AbstractKMST {
 	 */
 	@Override
 	public void run() {
-		HashSet<Edge> fixedEdges = null;
-		BitSet fixedVertices = null;
-		PriorityQueue<Edge> allowedEdges = null;
-		HashSet<Edge> forbiddenEdges = null;
-		
-		Edge e = null;
-		while((e = edges.poll()) != null) {
-			fixedEdges = new HashSet<Edge>();
-			fixedEdges.add(e);
-
-			fixedVertices = new BitSet(numNodes);
-			fixedVertices.set(e.node1); 
-			fixedVertices.set(e.node2); 
-
-            allowedEdges = new PriorityQueue<Edge>();
-			for(Edge x : vertices[e.node1]) {
-				if(!(allowedEdges.contains(x)) && !(x.equals(e))) {
-					allowedEdges.add(x);
-				}
-			}
-			for(Edge x : vertices[e.node2]) {
-				if(!(allowedEdges.contains(x)) && !(x.equals(e))) {
-					allowedEdges.add(x);
-				}
-			}
-
-			int lowerBound = e.weight;
-			forbiddenEdges = new HashSet<Edge>();
-			p(fixedEdges, fixedVertices, allowedEdges, forbiddenEdges, lowerBound, 2); 
-		}
 		System.out.println(i);
 	}
 
@@ -137,88 +116,11 @@ public class KMST extends AbstractKMST {
 		*/
 
 	}
-
-	private void p(HashSet<Edge> fixedEdges, BitSet fixedVertices, PriorityQueue<Edge> allowedEdges, HashSet<Edge> forbiddenEdges, int lowerBound, int size) {
-
-		/*if(lowerBound >= upperBound) {
-			// Cut
-			return;
-		}*/
-		if(size == k) {
-			// Lösung gefunden..
-			// System.out.println(fixedEdges + " " + lowerBound);
-			HashSet<Edge> t = new HashSet<Edge>(fixedEdges);
-			setSolution(lowerBound, t);
-			upperBound = lowerBound;
-
-			System.out.println(fixedEdges);
-			System.out.println(fixedVertices);
-			System.out.println(allowedEdges);
-			System.out.println(forbiddenEdges);
-			System.out.println(lowerBound + "\n");
-
-			return;
-		}
-		Edge e;
-		while((e = allowedEdges.poll()) != null) {
-			HashSet<Edge> fixedEdges2 = new HashSet<Edge>(fixedEdges);
-			fixedEdges2.add(e);
-
-			int lowerBound2 = lowerBound;
-			lowerBound2 += e.weight;
-
-			// hier könnte gleich überprüft werden
-
-			BitSet fixedVertices2 = (BitSet)fixedVertices.clone();
-			fixedVertices2.set(e.node1);
-			fixedVertices2.set(e.node2);
-
-			PriorityQueue<Edge> allowedEdges2 = new PriorityQueue<Edge>(allowedEdges);
-			allowedEdges2.remove(e);
-			// Problem: kanten die kreise bilden befinden sich noch in allowedEdges
-
-			boolean n1 = fixedVertices2.get(e.node1);
-			boolean n2 = fixedVertices2.get(e.node2);
-
-			// Neu hinzugekommenen Knoten bestimmen
-			Vertex v = null;
-			if(n1) {
-				v = vertices[e.node2];
-			}
-			else if(n2) {
-				v = vertices[e.node1];
-			}
-
-			for( Edge x : v) {
-				i++;
-				// kante erlaubt?
-				if(!forbiddenEdges.contains(x) && !(fixedEdges.contains(x))) {
-					boolean x1 = fixedVertices2.get(x.node1);
-					boolean x2 = fixedVertices2.get(x.node2);
-
-					// entsteht ein kreis?
-					if(!(x1 && x2)) {
-						// Kante wird zur Front hinzugefügt
-						allowedEdges2.add(x);
-					}
-					else {
-						// Durch den neuen Knoten würde durch diese Kante ein Kreis entstehen
-						allowedEdges2.remove(x);
-					}
-				}
-			}
-
-			HashSet<Edge> forbiddenEdges2 = new HashSet<Edge>(forbiddenEdges);
-			forbiddenEdges2.add(e);
-
-			p(fixedEdges2, fixedVertices2, allowedEdges2, forbiddenEdges, lowerBound2, size+1);
-			p(fixedEdges, fixedVertices, allowedEdges, forbiddenEdges2, lowerBound, size);
-		}
-	}
 }
 
 class Vertex extends ArrayList<Edge> {
 	public final int node;
+  public final int value;
 
 	public Vertex(int node) {
 		this.node = node;
