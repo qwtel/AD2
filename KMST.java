@@ -1,5 +1,7 @@
 package ads1ss12.pa;
 
+import java.util.Set;
+import java.util.List;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.PriorityQueue;
@@ -8,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.BitSet;
+import java.util.Collection;
 
 /**
  * Klasse zum Berechnen eines k-MST mittels Branch-and-Bound. Hier sollen Sie
@@ -23,7 +26,8 @@ public class KMST extends AbstractKMST {
 	private int numNodes;
 	private int upperBound = Integer.MAX_VALUE;
 	private int lowerBound = Integer.MAX_VALUE;
-	private Vertex startVertex;
+
+	private int problemNumber = 0;
 
 	/**
 	 * Der Konstruktor. Hier ist die richtige Stelle f&uuml;r die
@@ -44,33 +48,10 @@ public class KMST extends AbstractKMST {
 		this.edges = new ArrayList<Edge>(edges);
 		this.k = k;
 
-		adjList = new Vertex[numNodes];
-		adjMatrix = new Edge[numNodes][numNodes];
-
-		/*
-		 * Adjazenzmatrix erstellen
-		 */
-		for(Edge e : edges) {
-			adjMatrix[e.node1][e.node2] = e;
-			adjMatrix[e.node2][e.node1] = e;
-		}
-
-		/*
-		 * Adjazenzliste (=Liste von Edges) erstellen
-		 */
-		for(Edge e : edges) {
-			if(adjList[e.node1] == null) {
-				adjList[e.node1] = new Vertex(e.node1);
-			}
-			if(adjList[e.node2] == null) {
-				adjList[e.node2] = new Vertex(e.node2);
-			}
-			adjList[e.node1].add(e);
-			adjList[e.node2].add(e);
-		}
+		adjList = createAdjacencyList(this.edges, numNodes);
+		adjMatrix = createAdjacencyMatrix(this.edges, numNodes);
 
 		Collections.sort(this.edges);
-		startVertex = Collections.min(Arrays.asList(adjList));
 
 		/*
 		 * Ausgabe
@@ -89,9 +70,35 @@ public class KMST extends AbstractKMST {
 
 		s = "";
 		for(Vertex v : adjList) {
-			s += v.node + ": " + v + "\n";
+			s += "\n" + v.node + ": " + v;
 		}
 		Main.printDebug(s);
+	}
+
+	private Vertex[] createAdjacencyList(Collection<Edge> edges, int numNodes) {
+		Vertex[] adjList = new Vertex[numNodes];
+		for(Edge e : edges) {
+			if(adjList[e.node1] == null) {
+				adjList[e.node1] = new Vertex(e.node1);
+			}
+			if(adjList[e.node2] == null) {
+				adjList[e.node2] = new Vertex(e.node2);
+			}
+			adjList[e.node1].add(e);
+			adjList[e.node2].add(e);
+		}
+		return adjList;
+	}
+
+	private Edge[][] createAdjacencyMatrix(Collection<Edge> edges, int numNodes) {
+		Edge[][] adjMatrix = new Edge[numNodes][numNodes];
+		for(Edge e : edges) {
+			if(adjMatrix[e.node1][e.node2] == null || adjMatrix[e.node1][e.node2].weight > e.weight) {
+				adjMatrix[e.node1][e.node2] = e;
+				adjMatrix[e.node2][e.node1] = e;
+			}
+		}
+		return adjMatrix;
 	}
 
 	/**
@@ -105,63 +112,28 @@ public class KMST extends AbstractKMST {
 	 */
 	@Override
 	public void run() {
-		HashSet<Edge> heuristicSol = prims(startVertex);
+		Vertex startVertex = Collections.min(Arrays.asList(adjList));
+		HashSet<Edge> primsSolution = prims(startVertex);
 
-		upperBound = getUpperBound(heuristicSol);
-		lowerBound = getLowerBound(edges, k);
+		lowerBound = getLowerBound(0, k);
+		upperBound = getUpperBound(primsSolution);
+		setSolution(upperBound, primsSolution);
 
-		Main.printDebug(lowerBound + " / " + upperBound);
-
-		setSolution(upperBound, heuristicSol);
+		//Main.printDebug(lowerBound + " / " + upperBound);
 
 		HashSet<Edge> fixedEdges = new HashSet<Edge>(k-1);
 		p(fixedEdges, 0, 0);
 	}
 
-	private int getLowerBound(Queue<Edge> edges, int k) {
-		if(k > 0) {
-			ArrayList<Edge> temp = new ArrayList<Edge>();
-			int weight = 0;
-			for(int i=0; i<k-1; i++) {
-				Edge e = edges.poll();
-				temp.add(e);
-				weight += e.weight;
-			}
-			edges.addAll(temp);
-			
-			return weight;
-		}
-		return 0;
-	}
-
-	private int getLowerBound(ArrayList<Edge> edges, int k) {
-		if(k > 0) {
-			int weight = 0;
-		  	for(int i=0; i<k-1; i++) {
-				weight += edges.get(i).weight;
-			}
-			return weight;
-		}
-		return 0;
-	}
-
-	/*
 	private int getLowerBound(int i, int k) {
-		if(k > 0) {
-			int weight = 0;
-			j = 0;
-			while(j < k-1) {
-				Edge e = edges.get(i+j);
-				if(!fixedEdges.contains(e)) {
-					weight += edges.get(i).weight;
-					j++;
-				}
-			}
-			return weight;
+		int weight = 0;
+		int j = 0;
+		while(j < k-1) {
+			weight += edges.get(i+j).weight;
+			j++;
 		}
-		return 0;
+		return weight;
 	}
-	*/
 
 	private int getUpperBound(HashSet<Edge> solution) {
 		int weight = 0;
@@ -171,63 +143,100 @@ public class KMST extends AbstractKMST {
 		return weight;
 	}
 
-	private void p(HashSet<Edge> fixedEdges, Queue<Edge> availableEdges, int weight) {
-
-		// Bounding
-		// berechne für P' lokale untere Schranke L' mit Dualheuristik;
-		int localLowerBound = weight + getLowerBound(availableEdges, k-fixedEdges.size());
-		// Fall L' >= U bracht nicht weiter verfolgt werden!
-		if(localLowerBound <= upperBound) {
-			// berechne für P' gültige heur. Lösung -> obere Schranke U';
-			if(fixedEdges.size() == k-1) {
-				//U = U'; // neue beste Lösung gefunden
-				// Zusammenhang und Kreisfreiheit überprüfen -> DFS
-				Main.printDebug(weight + " " + fixedEdges);
-				return;
-			}
-			// Fall L' >= U braucht nicht weiter verfolgt werden!
-			if(localLowerBound <= upperBound) {
-				// Branching
-				// partitioniere P' in Teilprobleme P1, P2;
-				Edge e = availableEdges.poll();
-				p(new HashSet<Edge>(fixedEdges), new LinkedList<Edge>(availableEdges), weight);
-
-				fixedEdges.add(e);
-				weight += e.weight;
-				p(new HashSet<Edge>(fixedEdges), new LinkedList<Edge>(availableEdges), weight);
-			}
-		}
-	}
-
 	private void p(HashSet<Edge> fixed, int index, int weight) {
 
+		//Main.printDebug(++problemNumber);
+		//Main.printDebug(getLowerBound(index, k-fixed.size()));
+		//locallowerbound -= edges.get(...).weight; 
+		//locallowerbound += edges.get(...).weight;
+
 		// Bounding
-		// berechne für P' lokale untere Schranke L' mit Dualheuristik;
 		int localLowerBound = weight + getLowerBound(index, k-fixed.size());
-		// Fall L' >= U bracht nicht weiter verfolgt werden!
-		if(localLowerBound <= upperBound) {
-			// berechne für P' gültige heur. Lösung -> obere Schranke U';
+		if(localLowerBound < upperBound && index + k-1 < numEdges) {
 			if(fixed.size() == k-1) {
-				//U = U'; // neue beste Lösung gefunden
-				// Zusammenhang und Kreisfreiheit überprüfen -> DFS
-				Main.printDebug(weight + " " + fixed);
+				if(weight < upperBound && validSolution(fixed)) {
+					setSolution(weight, new HashSet<Edge>(fixed));
+					upperBound = weight;
+					//Main.printDebug(weight + ", " + fixed);
+				}
 				return;
 			}
-			// Fall L' >= U braucht nicht weiter verfolgt werden!
-			if(localLowerBound <= upperBound) {
-				// Branching
-				// partitioniere P' in Teilprobleme P1, P2;
-				p(new HashSet<Edge>(fixed), index+1, weight);
+			// Branching
 
-				Edge e = fixed.get(index);
-				fixed.add(e);
-				p(new HashSet<Edge>(fixed), index+1, weight + e.weight);
+			if(localLowerBound < upperBound) {
+				Edge e = edges.get(index);
+				HashSet<Edge> asdf = new HashSet<Edge>(fixed);
+				asdf.add(e);
+				p(asdf, index+1, weight + e.weight);
+			}
+			if(localLowerBound < upperBound) {
+				p(new HashSet<Edge>(fixed), index+1, weight);
 			}
 		}
 	}
 
-	private boolean DFS(Vertex s) {
+	private boolean validSolution(Set<Edge> edges) {
+		DDM unionField = new DDM(numNodes);
+
+		for(Edge e : edges) {
+			unionField.makeSet(e.node1);
+			unionField.makeSet(e.node2);
+		}
+
+		// Kreisfreiheit prüfen
+		for(Edge e : edges) {
+			if(unionField.findSet(e.node1) != unionField.findSet(e.node2)) {
+				unionField.union(e.node1, e.node2);
+			}
+			else {
+				return false;
+			}
+		}
+
+		// Zusammenhang prüfen
+		if(unionField.getNumSets() == 1) {
+			return true;
+		}
+
 		return false;
+	}
+
+
+	class DDM {
+		private int[] parent;
+		private BitSet marked;
+		private int numSets;
+
+		public DDM(int numNodes) {
+			parent = new int[numNodes];
+			marked = new BitSet(numNodes);
+			numSets = 0;
+		}
+
+		public void makeSet(int v) {
+			if(!marked.get(v)) {
+				parent[v] = v; 
+				marked.set(v);
+				numSets++;
+			}
+		}
+
+		public void union(int v, int w) {
+			parent[v] = w;
+			numSets--;
+		}
+
+		public int findSet(int v) {
+			int h = v;
+			while(parent[h] != h) {
+				h = parent[h];
+			}
+			return h;
+		}
+
+		public int getNumSets() {
+			return numSets;
+		}
 	}
 
 	private HashSet<Edge> prims(Vertex s) {
@@ -270,47 +279,48 @@ public class KMST extends AbstractKMST {
 		}
 		return v;
 	}
+
+	class Vertex extends PriorityQueue<Edge> implements Comparable<Vertex> {
+		public final int node;
+		public int value;
+		public int metric;
+		public int shortestPath;
+
+		public Vertex(int node) {
+			this.node = node;
+			this.value = 0;
+			this.metric = 0;
+		}
+
+		public boolean add(Edge e) {
+			boolean success;
+			if(success = super.add(e)) {
+				value += e.weight;
+				metric = value/size(); 
+			}
+			return success;
+		}
+
+		public boolean equals(Object other) {
+			if (other instanceof Vertex) {
+				Vertex o = (Vertex) other;
+				return node == o.node;
+			}
+			else {
+				return false;
+			}
+		}
+
+		public int compareTo(Vertex o) {
+			int d = this.metric - o.metric;
+			if(d < 0) {
+				return -1;
+			}
+			else if(d > 0) {
+				return 1;
+			}
+			return 0;
+		}
+	}
 }
 
-class Vertex extends PriorityQueue<Edge> implements Comparable<Vertex> {
-	public final int node;
-	public int value;
-	public int metric;
-	public int shortestPath;
-
-	public Vertex(int node) {
-		this.node = node;
-		this.value = 0;
-		this.metric = 0;
-	}
-
-	public boolean add(Edge e) {
-		boolean success;
-		if(success = super.add(e)) {
-			value += e.weight;
-			metric = value/size(); 
-		}
-		return success;
-	}
-
-	public boolean equals(Object other) {
-		if (other instanceof Vertex) {
-			Vertex o = (Vertex) other;
-			return node == o.node;
-		}
-		else {
-			return false;
-		}
-	}
-
-	public int compareTo(Vertex o) {
-		int d = this.metric - o.metric;
-		if(d < 0) {
-			return -1;
-		}
-		else if(d > 0) {
-			return 1;
-		}
-		return 0;
-	}
-}
