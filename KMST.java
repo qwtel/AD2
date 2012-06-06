@@ -112,12 +112,17 @@ public class KMST extends AbstractKMST {
 	 */
 	@Override
 	public void run() {
-		Vertex startVertex = Collections.min(Arrays.asList(adjList));
-		HashSet<Edge> primsSolution = prims(startVertex);
+		//Vertex startVertex = Collections.min(Arrays.asList(adjList));
 
-		lowerBound = getLowerBound(0, k);
-		upperBound = getUpperBound(primsSolution);
-		setSolution(upperBound, primsSolution);
+		for(Vertex v : adjList) {
+			HashSet<Edge> primsSolution = prims(v);
+			int weight = getUpperBound(primsSolution);
+
+			if(weight < upperBound) {
+				upperBound = weight;
+				setSolution(upperBound, primsSolution);
+			}
+		}
 
 		//Main.printDebug(lowerBound + " / " + upperBound);
 
@@ -323,4 +328,3 @@ public class KMST extends AbstractKMST {
 		}
 	}
 }
-
