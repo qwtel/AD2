@@ -190,7 +190,7 @@ public class Main {
 		long start = System.currentTimeMillis();
 		long end = System.currentTimeMillis();
 		long offs = end - start;
-		long timeout = 30000; // 30 seconds
+		long timeout = 60000; // 30 seconds
 
 		chopFileName();
 

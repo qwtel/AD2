@@ -87,6 +87,9 @@ public class KMST extends AbstractKMST {
 			adjList[e.node1].add(e);
 			adjList[e.node2].add(e);
 		}
+		for(int i=0; i<adjList.length; i++) {
+			Collections.sort(adjList[i]);
+		}
 		return adjList;
 	}
 
@@ -112,8 +115,6 @@ public class KMST extends AbstractKMST {
 	 */
 	@Override
 	public void run() {
-		//Vertex startVertex = Collections.min(Arrays.asList(adjList));
-
 		for(Vertex v : adjList) {
 			HashSet<Edge> primsSolution = prims(v);
 			int weight = getUpperBound(primsSolution);
@@ -124,10 +125,182 @@ public class KMST extends AbstractKMST {
 			}
 		}
 
-		//Main.printDebug(lowerBound + " / " + upperBound);
+		/*for(Vertex v : adjList) {
+			TreeProblem p = new TreeProblem(v);
+			Main.printDebug(p);
+			primsEnum(p);
+		}*/
 
+		/*
 		HashSet<Edge> fixedEdges = new HashSet<Edge>(k-1);
-		p(fixedEdges, 0, 0);
+		problem(fixedEdges, 0, 0);
+		*/
+	}
+
+	private HashSet<Edge> prims(Vertex s) {
+		PriorityQueue<Edge> relevant = new PriorityQueue<Edge>(s);
+		HashSet<Edge> selected = new HashSet<Edge>();
+		BitSet visited = new BitSet(numNodes);
+
+		visited.set(s.node);
+
+		while(selected.size() < k-1) {
+			Edge e = relevant.poll();
+			Vertex newVertex = getOuterVertex(e, visited);
+			visited.set(newVertex.node);
+			selected.add(e);
+
+			for(Edge x : newVertex) {
+				if(createsCircle(x, visited) == false) {
+					relevant.add(x);
+				}
+				else {
+					relevant.remove(x);
+				}
+			}
+		}
+
+		return selected;
+	}
+
+	private void primsEnum(TreeProblem p) {
+		Vertex v = p.v;
+		HashSet<Edge> fixed = p.fixed;
+		int weight = p.weight;
+		HashSet<Edge> forbidden = p.forbidden;
+		HashSet<Edge> relevant = p.relevant;
+		HashSet<Edge> shortest = p.shortest;
+		BitSet visited = p.visited;
+
+		// Bounding
+		int localLowerBound = weight; //+ getLowerBound(shortest);
+		if(localLowerBound < upperBound) {
+			if(fixed.size() == k-1) {
+				Main.printDebug(p);
+				if(weight < upperBound) {
+					setSolution(weight, new HashSet<Edge>(fixed));
+					upperBound = weight;
+				}
+				return;
+			}
+
+			if(localLowerBound < upperBound) {
+				for(Edge x : v) {
+					if(!createsCircle(x, visited) && !forbidden.contains(x)) {
+						relevant.add(x);
+					}
+					else {
+						relevant.remove(x);
+					}
+				}
+
+				// Branching
+				for(Edge e : relevant) {
+					Vertex newVertex = getOuterVertex(e, visited);
+
+					TreeProblem p0 = new TreeProblem(v, fixed, weight, forbidden, relevant, shortest, visited);
+					TreeProblem p1 = new TreeProblem(newVertex, fixed, weight, forbidden, relevant, shortest, visited);
+
+					p1.fixed.add(e);
+					p1.visited.set(newVertex.node);
+					if(!p1.shortest.remove(e)) {
+						p1.shortest.remove(Collections.max(p1.shortest));
+					}
+					p1.weight += e.weight;
+					p1.relevant.remove(e);
+
+					p0.forbidden.add(e);
+					if(p0.shortest.remove(e)) {
+						for(Edge s : edges) {
+							if(!fixed.contains(s) && !forbidden.contains(s)) {
+								p0.shortest.add(s);
+								break;
+							}
+						}
+					}
+					p0.relevant.remove(e);
+
+					primsEnum(p1);
+					primsEnum(p0);
+				}
+			}
+		}
+	}
+	
+	private int getLowerBound(HashSet<Edge> shortest) {
+		int weight = 0;
+		for(Edge e : shortest) {
+			weight += e.weight;
+		}
+		return weight;
+	}
+
+	class TreeProblem {
+		public Vertex v;
+		public HashSet<Edge> fixed; 
+		public int weight;
+		public HashSet<Edge> forbidden;
+		public HashSet<Edge> relevant;
+		public HashSet<Edge> shortest;
+		public BitSet visited;
+
+		/**
+		 * @param v Neu hinzugekommener Knoten.
+		 * @param fixed Bereits fixierte Kanten.
+		 * @param weight Gewicht der fixierten Kanten.
+		 * @param forbidden Kanten die nicht Teil des Subproblems sind.
+		 * @param relevant Nachbarknoten der fixierten Kanten, welche keinen Kreis bilden.
+		 * @param shortest Die kürzesten Kanten die nicht verboten oder fixiert sind und zusammen mit fixed k-1 ausmachen.
+		 * @param visited Bereits besuchte Knoten.
+		 */
+		public TreeProblem(Vertex v, HashSet<Edge> fixed, int weight, HashSet<Edge> forbidden, HashSet<Edge> relevant, HashSet<Edge> shortest, BitSet visited) {
+			this.v = v;
+			this.fixed = new HashSet<Edge>(fixed);
+			this.weight = weight;
+			this.forbidden = new HashSet<Edge>(forbidden);
+			this.shortest = new HashSet<Edge>(shortest);
+			this.relevant = new HashSet<Edge>(relevant);
+			this.visited =	(BitSet)visited.clone();
+		}
+
+		public TreeProblem(Vertex v) {
+			this.v = v;
+			fixed = new HashSet<Edge>();
+			weight = 0;
+			forbidden = new HashSet<Edge>();
+			relevant = new HashSet<Edge>();
+			visited = new BitSet(numNodes);
+
+			shortest = new HashSet<Edge>();
+			for(int i=0; i<k; i++) {
+				shortest.add(edges.get(i));
+			}
+		}
+
+		public String toString() {
+			return "\nVertex: " + v.node + 
+				"\n Fixed: " + weight + ": " + fixed + 
+				"\n Forbidden: " + forbidden + 
+				"\n Relevant: " + relevant + 
+				"\n Shortest: " + shortest + 
+				"\n Visited: " + visited;
+
+		}
+	}
+
+	private boolean createsCircle(Edge e, BitSet visited) {
+		return visited.get(e.node1) && visited.get(e.node2);
+	}
+
+	private Vertex getOuterVertex(Edge e, BitSet visited) {
+		Vertex v = null;
+		if(visited.get(e.node1)) {
+			v = adjList[e.node2];
+		}
+		else {
+			v = adjList[e.node1];
+		}
+		return v;
 	}
 
 	private int getLowerBound(int i, int k) {
@@ -148,40 +321,59 @@ public class KMST extends AbstractKMST {
 		return weight;
 	}
 
-	private void p(HashSet<Edge> fixed, int index, int weight) {
+	class Problem {
+		public HashSet<Edge> fixed;
+		public int index;
+		public int weight;
 
-		//Main.printDebug(++problemNumber);
-		//Main.printDebug(getLowerBound(index, k-fixed.size()));
-		//locallowerbound -= edges.get(...).weight; 
-		//locallowerbound += edges.get(...).weight;
+		public Problem(HashSet<Edge> fixed, int index, int weight) {
+			this.fixed = new HashSet<Edge>(fixed);
+			this.index = index;
+			this.weight = weight;
+		}
+	}
 
-		// Bounding
-		int localLowerBound = weight + getLowerBound(index, k-fixed.size());
-		if(localLowerBound < upperBound && index + k-1 < numEdges) {
-			if(fixed.size() == k-1) {
-				if(weight < upperBound && validSolution(fixed)) {
-					setSolution(weight, new HashSet<Edge>(fixed));
-					upperBound = weight;
-					//Main.printDebug(weight + ", " + fixed);
+	private void problem(HashSet<Edge> fixed, int index, int weight) {
+
+		LinkedList<Problem> problems = new LinkedList<Problem>();
+		problems.offer(new Problem(fixed, index, weight));
+
+		while(problems.size() != 0) {
+
+			Problem p = problems.pollLast();
+			fixed = p.fixed;
+			index = p.index;
+			weight = p.weight;
+
+			// Bounding
+			int localLowerBound = weight + getLowerBound(index, k-fixed.size());
+
+			if(localLowerBound < upperBound && index + k-1 < numEdges) {
+				if(fixed.size() == k-1) {
+					if(weight < upperBound && validSolution(fixed)) {
+						setSolution(weight, new HashSet<Edge>(fixed));
+						upperBound = weight;
+					}
+					continue;
 				}
-				return;
-			}
-			// Branching
 
-			if(localLowerBound < upperBound) {
-				Edge e = edges.get(index);
-				HashSet<Edge> asdf = new HashSet<Edge>(fixed);
-				asdf.add(e);
-				p(asdf, index+1, weight + e.weight);
-			}
-			if(localLowerBound < upperBound) {
-				p(new HashSet<Edge>(fixed), index+1, weight);
+				// Branching
+				if(localLowerBound < upperBound) {
+					Edge e = edges.get(index);
+					Problem p0 = new Problem(fixed, index+1, weight);
+					Problem p1 = new Problem(fixed, index+1, weight);
+					p1.fixed.add(e);
+					p1.weight += e.weight;
+
+					problems.offer(p1);
+					problems.offer(p0);
+				}
 			}
 		}
 	}
 
 	private boolean validSolution(Set<Edge> edges) {
-		DDM unionField = new DDM(numNodes);
+		DisjointSet unionField = new DisjointSet(numNodes);
 
 		for(Edge e : edges) {
 			unionField.makeSet(e.node1);
@@ -197,22 +389,21 @@ public class KMST extends AbstractKMST {
 				return false;
 			}
 		}
-
 		// Zusammenhang prüfen
 		if(unionField.getNumSets() == 1) {
+			Main.printDebug("alles ok");
 			return true;
 		}
 
 		return false;
 	}
 
-
-	class DDM {
+	class DisjointSet {
 		private int[] parent;
 		private BitSet marked;
 		private int numSets;
 
-		public DDM(int numNodes) {
+		public DisjointSet(int numNodes) {
 			parent = new int[numNodes];
 			marked = new BitSet(numNodes);
 			numSets = 0;
@@ -244,66 +435,11 @@ public class KMST extends AbstractKMST {
 		}
 	}
 
-	private HashSet<Edge> prims(Vertex s) {
-		PriorityQueue<Edge> relevant = new PriorityQueue<Edge>(s);
-		HashSet<Edge> selected = new HashSet<Edge>();
-		BitSet visited = new BitSet(numNodes);
-
-		visited.set(s.node);
-
-		while(selected.size() < k-1) {
-			Edge e = relevant.poll();
-			Vertex newVertex = getOuterVertex(e, visited);
-			visited.set(newVertex.node);
-			selected.add(e);
-
-			for(Edge x : newVertex) {
-				if(createsCircle(x, visited) == false) {
-					relevant.add(x);
-				}
-				else {
-					relevant.remove(x);
-				}
-			}
-		}
-
-		return selected;
-	}
-
-	private boolean createsCircle(Edge e, BitSet visited) {
-		return visited.get(e.node1) && visited.get(e.node2);
-	}
-
-	private Vertex getOuterVertex(Edge e, BitSet visited) {
-		Vertex v = null;
-		if(visited.get(e.node1)) {
-			v = adjList[e.node2];
-		}
-		else {
-			v = adjList[e.node1];
-		}
-		return v;
-	}
-
-	class Vertex extends PriorityQueue<Edge> implements Comparable<Vertex> {
+	class Vertex extends ArrayList<Edge> {
 		public final int node;
-		public int value;
-		public int metric;
-		public int shortestPath;
 
 		public Vertex(int node) {
 			this.node = node;
-			this.value = 0;
-			this.metric = 0;
-		}
-
-		public boolean add(Edge e) {
-			boolean success;
-			if(success = super.add(e)) {
-				value += e.weight;
-				metric = value/size(); 
-			}
-			return success;
 		}
 
 		public boolean equals(Object other) {
@@ -314,17 +450,6 @@ public class KMST extends AbstractKMST {
 			else {
 				return false;
 			}
-		}
-
-		public int compareTo(Vertex o) {
-			int d = this.metric - o.metric;
-			if(d < 0) {
-				return -1;
-			}
-			else if(d > 0) {
-				return 1;
-			}
-			return 0;
 		}
 	}
 }
