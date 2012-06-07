@@ -11,6 +11,8 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.TreeSet;
 
 /**
  * Klasse zum Berechnen eines k-MST mittels Branch-and-Bound. Hier sollen Sie
@@ -26,6 +28,7 @@ public class KMST extends AbstractKMST {
 	private int numNodes;
 	private int upperBound = Integer.MAX_VALUE;
 	private int lowerBound = Integer.MAX_VALUE;
+	private ArrayList<Vertex> vertices;
 
 	private int problemNumber = 0;
 
@@ -48,15 +51,21 @@ public class KMST extends AbstractKMST {
 		this.edges = new ArrayList<Edge>(edges);
 		this.k = k;
 
-		adjList = createAdjacencyList(this.edges, numNodes);
-		adjMatrix = createAdjacencyMatrix(this.edges, numNodes);
-
 		Collections.sort(this.edges);
+
+		adjList = createAdjacencyList(this.edges, numNodes);
+		//adjMatrix = createAdjacencyMatrix(this.edges, numNodes);
+
+		vertices = new ArrayList<Vertex>(Arrays.asList(adjList));
 
 		/*
 		 * Ausgabe
 		 */
+
 		String s = "";
+
+		/*
+		s = "";
 		for(int i=0; i<numNodes; i++) {
 			s += "\n";
 			for(int j=0; j<numNodes; j++) {
@@ -68,11 +77,11 @@ public class KMST extends AbstractKMST {
 		}
 		Main.printDebug(s);
 
-		s = "";
-		for(Vertex v : adjList) {
-			s += "\n" + v.node + ": " + v;
+		for(Vertex v : vertices) {
+			s += "\n" + v;
 		}
 		Main.printDebug(s);
+		*/
 	}
 
 	private Vertex[] createAdjacencyList(Collection<Edge> edges, int numNodes) {
@@ -87,9 +96,11 @@ public class KMST extends AbstractKMST {
 			adjList[e.node1].add(e);
 			adjList[e.node2].add(e);
 		}
+		/*
 		for(int i=0; i<adjList.length; i++) {
 			Collections.sort(adjList[i]);
 		}
+		*/
 		return adjList;
 	}
 
@@ -115,29 +126,39 @@ public class KMST extends AbstractKMST {
 	 */
 	@Override
 	public void run() {
-		for(Vertex v : adjList) {
-			HashSet<Edge> primsSolution = prims(v);
+		for(Vertex v : vertices) {
+			HashSet<Edge> primsSolution = prim(v);
 			int weight = getUpperBound(primsSolution);
 
 			if(weight < upperBound) {
 				upperBound = weight;
 				setSolution(upperBound, primsSolution);
 			}
+
+			v.value = weight;
 		}
 
-		/*for(Vertex v : adjList) {
-			TreeProblem p = new TreeProblem(v);
-			Main.printDebug(p);
-			primsEnum(p);
-		}*/
+		Collections.sort(vertices);
 
-		/*
-		HashSet<Edge> fixedEdges = new HashSet<Edge>(k-1);
-		problem(fixedEdges, 0, 0);
-		*/
+		for(Vertex v : vertices) {
+			Main.printDebug(v);
+			PriorityQueue<Edge> relevant = new PriorityQueue<Edge>(v);
+			HashSet<Edge> selected = new HashSet<Edge>();
+			BitSet visited = new BitSet(numNodes);
+
+			visited.set(v.node);
+
+			primEnum(relevant, selected, visited, 0);
+
+			for(Vertex w : vertices) {
+				if(!w.equals(v)) {
+					w.removeNode(v.node);
+				}
+			}
+		}
 	}
 
-	private HashSet<Edge> prims(Vertex s) {
+	private HashSet<Edge> prim(Vertex s) {
 		PriorityQueue<Edge> relevant = new PriorityQueue<Edge>(s);
 		HashSet<Edge> selected = new HashSet<Edge>();
 		BitSet visited = new BitSet(numNodes);
@@ -146,16 +167,15 @@ public class KMST extends AbstractKMST {
 
 		while(selected.size() < k-1) {
 			Edge e = relevant.poll();
-			Vertex newVertex = getOuterVertex(e, visited);
-			visited.set(newVertex.node);
-			selected.add(e);
+			if(!createsCircle(e, visited)) {
+				Vertex newVertex = getOuterVertex(e, visited);
+				visited.set(newVertex.node);
+				selected.add(e);
 
-			for(Edge x : newVertex) {
-				if(createsCircle(x, visited) == false) {
-					relevant.add(x);
-				}
-				else {
-					relevant.remove(x);
+				for(Edge x : newVertex) {
+					if(!createsCircle(x, visited)) {
+						relevant.add(x);
+					}
 				}
 			}
 		}
@@ -163,131 +183,62 @@ public class KMST extends AbstractKMST {
 		return selected;
 	}
 
-	private void primsEnum(TreeProblem p) {
-		Vertex v = p.v;
-		HashSet<Edge> fixed = p.fixed;
-		int weight = p.weight;
-		HashSet<Edge> forbidden = p.forbidden;
-		HashSet<Edge> relevant = p.relevant;
-		HashSet<Edge> shortest = p.shortest;
-		BitSet visited = p.visited;
-
-		// Bounding
-		int localLowerBound = weight; //+ getLowerBound(shortest);
-		if(localLowerBound < upperBound) {
-			if(fixed.size() == k-1) {
-				Main.printDebug(p);
-				if(weight < upperBound) {
-					setSolution(weight, new HashSet<Edge>(fixed));
-					upperBound = weight;
-				}
-				return;
+	private int getLowerBound(BitSet visited, int n) {
+		int i = 0;
+		int j = 0;
+		int weight = 0;
+		while(j < n) {
+			Edge e = edges.get(i);
+			if(!createsCircle(e, visited)) {
+				weight += e.weight;
+				j++;
 			}
+			i++;
+		}
+		return weight;
+	}
 
-			if(localLowerBound < upperBound) {
-				for(Edge x : v) {
-					if(!createsCircle(x, visited) && !forbidden.contains(x)) {
-						relevant.add(x);
-					}
-					else {
-						relevant.remove(x);
-					}
-				}
+	int i = 0;
+	private void primEnum(PriorityQueue<Edge> relevant, HashSet<Edge> selected, BitSet visited, int weight) {
+		i++;
+		if(i%100000==0) {
+			Main.printDebug(i);
+		}
 
-				// Branching
-				for(Edge e : relevant) {
-					Vertex newVertex = getOuterVertex(e, visited);
+		int localLowerBound = weight + getLowerBound(visited, k-1-selected.size());
 
-					TreeProblem p0 = new TreeProblem(v, fixed, weight, forbidden, relevant, shortest, visited);
-					TreeProblem p1 = new TreeProblem(newVertex, fixed, weight, forbidden, relevant, shortest, visited);
+		if(localLowerBound < upperBound) {
+			if(selected.size() < k-1) {
+				Edge e = null;
+				while((e = relevant.poll()) != null) {
+					if(!createsCircle(e, visited)) {
+						Vertex newVertex = getOuterVertex(e, visited);
+						PriorityQueue<Edge> newRelevant = new PriorityQueue<Edge>(relevant);
+						HashSet<Edge> newSelected = new HashSet<Edge>(selected);
+						BitSet newVisited = (BitSet)visited.clone();
 
-					p1.fixed.add(e);
-					p1.visited.set(newVertex.node);
-					if(!p1.shortest.remove(e)) {
-						p1.shortest.remove(Collections.max(p1.shortest));
-					}
-					p1.weight += e.weight;
-					p1.relevant.remove(e);
+						newVisited.set(newVertex.node);
+						newSelected.add(e);
 
-					p0.forbidden.add(e);
-					if(p0.shortest.remove(e)) {
-						for(Edge s : edges) {
-							if(!fixed.contains(s) && !forbidden.contains(s)) {
-								p0.shortest.add(s);
-								break;
+						for(Edge x : newVertex) {
+							if(createsCircle(x, newVisited) == false) {
+								newRelevant.offer(x);
 							}
 						}
+						primEnum(newRelevant, newSelected, newVisited, weight + e.weight);
 					}
-					p0.relevant.remove(e);
-
-					primsEnum(p1);
-					primsEnum(p0);
+				}
+			}
+			else {
+				if(weight < upperBound) {
+					setSolution(weight, selected);
+					upperBound = weight;
+					Main.printDebug("It's getting warmer");
 				}
 			}
 		}
 	}
 	
-	private int getLowerBound(HashSet<Edge> shortest) {
-		int weight = 0;
-		for(Edge e : shortest) {
-			weight += e.weight;
-		}
-		return weight;
-	}
-
-	class TreeProblem {
-		public Vertex v;
-		public HashSet<Edge> fixed; 
-		public int weight;
-		public HashSet<Edge> forbidden;
-		public HashSet<Edge> relevant;
-		public HashSet<Edge> shortest;
-		public BitSet visited;
-
-		/**
-		 * @param v Neu hinzugekommener Knoten.
-		 * @param fixed Bereits fixierte Kanten.
-		 * @param weight Gewicht der fixierten Kanten.
-		 * @param forbidden Kanten die nicht Teil des Subproblems sind.
-		 * @param relevant Nachbarknoten der fixierten Kanten, welche keinen Kreis bilden.
-		 * @param shortest Die kürzesten Kanten die nicht verboten oder fixiert sind und zusammen mit fixed k-1 ausmachen.
-		 * @param visited Bereits besuchte Knoten.
-		 */
-		public TreeProblem(Vertex v, HashSet<Edge> fixed, int weight, HashSet<Edge> forbidden, HashSet<Edge> relevant, HashSet<Edge> shortest, BitSet visited) {
-			this.v = v;
-			this.fixed = new HashSet<Edge>(fixed);
-			this.weight = weight;
-			this.forbidden = new HashSet<Edge>(forbidden);
-			this.shortest = new HashSet<Edge>(shortest);
-			this.relevant = new HashSet<Edge>(relevant);
-			this.visited =	(BitSet)visited.clone();
-		}
-
-		public TreeProblem(Vertex v) {
-			this.v = v;
-			fixed = new HashSet<Edge>();
-			weight = 0;
-			forbidden = new HashSet<Edge>();
-			relevant = new HashSet<Edge>();
-			visited = new BitSet(numNodes);
-
-			shortest = new HashSet<Edge>();
-			for(int i=0; i<k; i++) {
-				shortest.add(edges.get(i));
-			}
-		}
-
-		public String toString() {
-			return "\nVertex: " + v.node + 
-				"\n Fixed: " + weight + ": " + fixed + 
-				"\n Forbidden: " + forbidden + 
-				"\n Relevant: " + relevant + 
-				"\n Shortest: " + shortest + 
-				"\n Visited: " + visited;
-
-		}
-	}
-
 	private boolean createsCircle(Edge e, BitSet visited) {
 		return visited.get(e.node1) && visited.get(e.node2);
 	}
@@ -303,16 +254,6 @@ public class KMST extends AbstractKMST {
 		return v;
 	}
 
-	private int getLowerBound(int i, int k) {
-		int weight = 0;
-		int j = 0;
-		while(j < k-1) {
-			weight += edges.get(i+j).weight;
-			j++;
-		}
-		return weight;
-	}
-
 	private int getUpperBound(HashSet<Edge> solution) {
 		int weight = 0;
 		for(Edge e : solution) {
@@ -321,125 +262,28 @@ public class KMST extends AbstractKMST {
 		return weight;
 	}
 
-	class Problem {
-		public HashSet<Edge> fixed;
-		public int index;
-		public int weight;
-
-		public Problem(HashSet<Edge> fixed, int index, int weight) {
-			this.fixed = new HashSet<Edge>(fixed);
-			this.index = index;
-			this.weight = weight;
-		}
-	}
-
-	private void problem(HashSet<Edge> fixed, int index, int weight) {
-
-		LinkedList<Problem> problems = new LinkedList<Problem>();
-		problems.offer(new Problem(fixed, index, weight));
-
-		while(problems.size() != 0) {
-
-			Problem p = problems.pollLast();
-			fixed = p.fixed;
-			index = p.index;
-			weight = p.weight;
-
-			// Bounding
-			int localLowerBound = weight + getLowerBound(index, k-fixed.size());
-
-			if(localLowerBound < upperBound && index + k-1 < numEdges) {
-				if(fixed.size() == k-1) {
-					if(weight < upperBound && validSolution(fixed)) {
-						setSolution(weight, new HashSet<Edge>(fixed));
-						upperBound = weight;
-					}
-					continue;
-				}
-
-				// Branching
-				if(localLowerBound < upperBound) {
-					Edge e = edges.get(index);
-					Problem p0 = new Problem(fixed, index+1, weight);
-					Problem p1 = new Problem(fixed, index+1, weight);
-					p1.fixed.add(e);
-					p1.weight += e.weight;
-
-					problems.offer(p1);
-					problems.offer(p0);
-				}
-			}
-		}
-	}
-
-	private boolean validSolution(Set<Edge> edges) {
-		DisjointSet unionField = new DisjointSet(numNodes);
-
-		for(Edge e : edges) {
-			unionField.makeSet(e.node1);
-			unionField.makeSet(e.node2);
-		}
-
-		// Kreisfreiheit prüfen
-		for(Edge e : edges) {
-			if(unionField.findSet(e.node1) != unionField.findSet(e.node2)) {
-				unionField.union(e.node1, e.node2);
-			}
-			else {
-				return false;
-			}
-		}
-		// Zusammenhang prüfen
-		if(unionField.getNumSets() == 1) {
-			Main.printDebug("alles ok");
-			return true;
-		}
-
-		return false;
-	}
-
-	class DisjointSet {
-		private int[] parent;
-		private BitSet marked;
-		private int numSets;
-
-		public DisjointSet(int numNodes) {
-			parent = new int[numNodes];
-			marked = new BitSet(numNodes);
-			numSets = 0;
-		}
-
-		public void makeSet(int v) {
-			if(!marked.get(v)) {
-				parent[v] = v; 
-				marked.set(v);
-				numSets++;
-			}
-		}
-
-		public void union(int v, int w) {
-			parent[v] = w;
-			numSets--;
-		}
-
-		public int findSet(int v) {
-			int h = v;
-			while(parent[h] != h) {
-				h = parent[h];
-			}
-			return h;
-		}
-
-		public int getNumSets() {
-			return numSets;
-		}
-	}
-
-	class Vertex extends ArrayList<Edge> {
+	class Vertex extends ArrayList<Edge> implements Comparable<Vertex> {
 		public final int node;
+		public int value = 0;
 
 		public Vertex(int node) {
 			this.node = node;
+		}
+
+		public void removeNode(int node) {
+			LinkedList<Edge> blackList = new LinkedList<Edge>();
+			for(Edge e : this) {
+				if(e.node1 == node || e.node2 == node) {
+					blackList.add(e);
+				}
+			}
+			for(Edge e: blackList) {
+				remove(e);
+			}
+		}
+
+		public int compareTo(Vertex e) {
+			return this.value - e.value;
 		}
 
 		public boolean equals(Object other) {
@@ -450,6 +294,10 @@ public class KMST extends AbstractKMST {
 			else {
 				return false;
 			}
+		}
+
+		public String toString() {
+			return node + ": ("+ value +") " + super.toString();
 		}
 	}
 }
