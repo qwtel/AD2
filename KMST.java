@@ -187,13 +187,13 @@ public class KMST extends AbstractKMST {
 	 * Voraussetzung ist, dass edges sortiert ist.
 	 * O(k)
 	 */
-	private int getLowerBound(BitSet visited, int n) {
+	private int getLowerBound(BitSet visited, BitSet forbidden, int n) {
 		int i = 0;
 		int j = 0;
 		int weight = 0;
 		while(j < n) {
 			Edge e = edges.get(i);
-			if(!createsCircle(e, visited)) {
+			if(!createsCircle(e, visited) && !isForbidden(e, forbidden)) {
 				weight += e.weight;
 				j++;
 			}
@@ -208,6 +208,7 @@ public class KMST extends AbstractKMST {
     class Problem {
 		public PriorityQueue<Edge> relevant;
 		public HashSet<Edge> selected;
+		public BitSet forbidden;
 		public BitSet visited;
 		public int weight;
 
@@ -217,6 +218,7 @@ public class KMST extends AbstractKMST {
 		public Problem(Vertex v) {
 			relevant = new PriorityQueue<Edge>(v);
 			selected = new HashSet<Edge>();
+			forbidden = new BitSet(numNodes);
 			visited = new BitSet(numNodes);
 			weight = 0;
 
@@ -229,6 +231,7 @@ public class KMST extends AbstractKMST {
 		public Problem(Problem p) {
 			relevant = new PriorityQueue<Edge>(p.relevant);
 			selected = new HashSet<Edge>(p.selected);
+			forbidden = (BitSet)p.forbidden.clone();
 			visited = (BitSet)p.visited.clone();
 			weight = p.weight;
 		}
@@ -250,13 +253,21 @@ public class KMST extends AbstractKMST {
 	}
 
 	int i = 0;
+	int level = 0;
+	int reachedLevel = 0;
 	private void primEnum(Problem p) {
 		i++;
+		level++;
 		if(i%100000==0) {
 			Main.printDebug(i);
 		}
+		if(level==17) {
+			reachedLevel++;
+			Main.printDebug("Level "+level+": "+reachedLevel);
+		}
 
-		int localLowerBound = p.weight + getLowerBound(p.visited, k-1-p.selected.size());
+		int localLowerBound = p.weight + getLowerBound(p.visited, p.forbidden, k-1-p.selected.size());
+
 		if(localLowerBound < upperBound) {
 			if(p.selected.size() < k-1) {
 				Edge e = null;
@@ -271,11 +282,12 @@ public class KMST extends AbstractKMST {
 
 						for(Edge x : nextVertex) {
 							if(!createsCircle(x, next.visited)) {
-								next.relevant.offer(x);
+							   	next.relevant.offer(x);
 							}
 						}
 
 					   	primEnum(next);
+						p.forbidden.set(nextVertex.node);
 					}
 				}
 			}
@@ -287,6 +299,7 @@ public class KMST extends AbstractKMST {
 				}
 			}
 		}
+		level--;
 	}
 	
 	/**
@@ -295,6 +308,14 @@ public class KMST extends AbstractKMST {
 	 */
 	private boolean createsCircle(Edge e, BitSet visited) {
 		return visited.get(e.node1) && visited.get(e.node2);
+	}
+
+	/**
+	 * Gleiche Logik wie createsCircle, aber der Name wäre irreführend.
+	 * O(1)
+	 */
+	private boolean isForbidden(Edge e, BitSet forbidden) {
+		return createsCircle(e, forbidden);
 	}
 
 	/**
