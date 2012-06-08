@@ -22,15 +22,12 @@ public class KMST extends AbstractKMST {
 
 	private ArrayList<Edge> edges;
 	private Vertex[] adjList;
-	private Edge[][] adjMatrix;
+	private ArrayList<Vertex> vertices;
+	//private Edge[][] adjMatrix;
 	private int k;
 	private int numEdges;
 	private int numNodes;
 	private int upperBound = Integer.MAX_VALUE;
-	private int lowerBound = Integer.MAX_VALUE;
-	private ArrayList<Vertex> vertices;
-
-	private int problemNumber = 0;
 
 	/**
 	 * Der Konstruktor. Hier ist die richtige Stelle f&uuml;r die
@@ -48,23 +45,19 @@ public class KMST extends AbstractKMST {
 	public KMST(Integer numNodes, Integer numEdges, HashSet<Edge> edges, int k) {
 		this.numNodes = numNodes;
 		this.numEdges = numEdges;
-		this.edges = new ArrayList<Edge>(edges);
 		this.k = k;
 
+		this.edges = new ArrayList<Edge>(edges);
 		Collections.sort(this.edges);
 
 		adjList = createAdjacencyList(this.edges, numNodes);
-		//adjMatrix = createAdjacencyMatrix(this.edges, numNodes);
-
 		vertices = new ArrayList<Vertex>(Arrays.asList(adjList));
 
-		/*
-		 * Ausgabe
-		 */
+		//adjMatrix = createAdjacencyMatrix(this.edges, numNodes);
 
+		/* Ausgabe */
+		/*
 		String s = "";
-
-		/*
 		s = "";
 		for(int i=0; i<numNodes; i++) {
 			s += "\n";
@@ -84,6 +77,11 @@ public class KMST extends AbstractKMST {
 		*/
 	}
 
+	/**
+	 * Die Adjazenz Liste ist ein Vertex Array. 
+	 * Der Index entspricht dabei der Nummer (node) des Knoten.
+	 * Außerdem werden die Kanten die von diesem Vertex weg gehen sortiert.
+	 */
 	private Vertex[] createAdjacencyList(Collection<Edge> edges, int numNodes) {
 		Vertex[] adjList = new Vertex[numNodes];
 		for(Edge e : edges) {
@@ -96,14 +94,16 @@ public class KMST extends AbstractKMST {
 			adjList[e.node1].add(e);
 			adjList[e.node2].add(e);
 		}
-		/*
 		for(int i=0; i<adjList.length; i++) {
 			Collections.sort(adjList[i]);
 		}
-		*/
 		return adjList;
 	}
 
+	/**
+	 * Die Adjazenz Matrix ist ein 2D Array von Edges.
+	 * Die Indizes entsprechen dabei den Nummern (node) der Knoten.
+	 */
 	private Edge[][] createAdjacencyMatrix(Collection<Edge> edges, int numNodes) {
 		Edge[][] adjMatrix = new Edge[numNodes][numNodes];
 		for(Edge e : edges) {
@@ -126,38 +126,37 @@ public class KMST extends AbstractKMST {
 	 */
 	@Override
 	public void run() {
+		prim(vertices);
+		Collections.sort(vertices);
+		primEnum(vertices);
+	}
+
+	/**
+	 * Führt den Prim Algorithmus auf jeden Knoten aus um eine initiale Lösung und eine gute obere Schranke zu erhalten.
+	 *
+	 * Außerdem wird jedem Knoten als Wert das Gewicht der Prim Lösung zugeordnet, denn auch diese Information ist
+	 * wertvoll. Damit kann das Branch and Bound-Verfahren in der Nähe einer guten Lösung gestartet werden, wodurch
+	 * schnell lokale Verbesserungen erreicht werden.
+	 * O(n*k*m)
+	 */
+	private void prim(Collection<Vertex> vertices) {
 		for(Vertex v : vertices) {
-			HashSet<Edge> primsSolution = prim(v);
-			int weight = getUpperBound(primsSolution);
+			HashSet<Edge> primSolution = prim(v);
+			int weight = getUpperBound(primSolution);
 
 			if(weight < upperBound) {
 				upperBound = weight;
-				setSolution(upperBound, primsSolution);
+				setSolution(upperBound, primSolution);
 			}
 
 			v.value = weight;
 		}
-
-		Collections.sort(vertices);
-
-		for(Vertex v : vertices) {
-			Main.printDebug(v);
-			PriorityQueue<Edge> relevant = new PriorityQueue<Edge>(v);
-			HashSet<Edge> selected = new HashSet<Edge>();
-			BitSet visited = new BitSet(numNodes);
-
-			visited.set(v.node);
-
-			primEnum(relevant, selected, visited, 0);
-
-			for(Vertex w : vertices) {
-				if(!w.equals(v)) {
-					w.removeNode(v.node);
-				}
-			}
-		}
 	}
 
+	/**
+	 * Prim Algorithmus für einen einzelnen Knoten.
+	 * O(k*m)
+	 */
 	private HashSet<Edge> prim(Vertex s) {
 		PriorityQueue<Edge> relevant = new PriorityQueue<Edge>(s);
 		HashSet<Edge> selected = new HashSet<Edge>();
@@ -183,6 +182,11 @@ public class KMST extends AbstractKMST {
 		return selected;
 	}
 
+	/**
+	 * Addiert die n kleinsten Kanten, die noch nicht besucht sind und keinen Kreis verursachen. 
+	 * Voraussetzung ist, dass edges sortiert ist.
+	 * O(k)
+	 */
 	private int getLowerBound(BitSet visited, int n) {
 		int i = 0;
 		int j = 0;
@@ -198,62 +202,123 @@ public class KMST extends AbstractKMST {
 		return weight;
 	}
 
+	/**
+	 * Kapselt die Parameter eines Problems und kümmert sich um das Klonen der Objekte.
+	 */
+    class Problem {
+		public PriorityQueue<Edge> relevant;
+		public HashSet<Edge> selected;
+		public BitSet visited;
+		public int weight;
+
+		/**
+		 * Erzeugt ein Initialproblem welches vom Knoten v ausgeht.
+		 */
+		public Problem(Vertex v) {
+			relevant = new PriorityQueue<Edge>(v);
+			selected = new HashSet<Edge>();
+			visited = new BitSet(numNodes);
+			weight = 0;
+
+			visited.set(v.node);
+		}
+
+		/**
+		 * Kopierkonstruktor.
+		 */
+		public Problem(Problem p) {
+			relevant = new PriorityQueue<Edge>(p.relevant);
+			selected = new HashSet<Edge>(p.selected);
+			visited = (BitSet)p.visited.clone();
+			weight = p.weight;
+		}
+	}
+
+    private void primEnum(Collection<Vertex> vertices) {
+		for(Vertex v : vertices) {
+			Main.printDebug(v);
+
+			Problem p = new Problem(v);
+			primEnum(p);
+
+			for(Vertex w : vertices) {
+				if(!w.equals(v)) {
+					w.removeNode(v.node);
+				}
+			}
+		}
+	}
+
 	int i = 0;
-	private void primEnum(PriorityQueue<Edge> relevant, HashSet<Edge> selected, BitSet visited, int weight) {
+	private void primEnum(Problem p) {
 		i++;
 		if(i%100000==0) {
 			Main.printDebug(i);
 		}
 
-		int localLowerBound = weight + getLowerBound(visited, k-1-selected.size());
-
+		int localLowerBound = p.weight + getLowerBound(p.visited, k-1-p.selected.size());
 		if(localLowerBound < upperBound) {
-			if(selected.size() < k-1) {
+			if(p.selected.size() < k-1) {
 				Edge e = null;
-				while((e = relevant.poll()) != null) {
-					if(!createsCircle(e, visited)) {
-						Vertex newVertex = getOuterVertex(e, visited);
-						PriorityQueue<Edge> newRelevant = new PriorityQueue<Edge>(relevant);
-						HashSet<Edge> newSelected = new HashSet<Edge>(selected);
-						BitSet newVisited = (BitSet)visited.clone();
+				while((e = p.relevant.poll()) != null) {
+					if(!createsCircle(e, p.visited)) {
+						Vertex nextVertex = getOuterVertex(e, p.visited);
 
-						newVisited.set(newVertex.node);
-						newSelected.add(e);
+						Problem next = new Problem(p);
+						next.visited.set(nextVertex.node);
+						next.selected.add(e);
+						next.weight += e.weight;
 
-						for(Edge x : newVertex) {
-							if(createsCircle(x, newVisited) == false) {
-								newRelevant.offer(x);
+						for(Edge x : nextVertex) {
+							if(!createsCircle(x, next.visited)) {
+								next.relevant.offer(x);
 							}
 						}
-						primEnum(newRelevant, newSelected, newVisited, weight + e.weight);
+
+					   	primEnum(next);
 					}
 				}
 			}
 			else {
-				if(weight < upperBound) {
-					setSolution(weight, selected);
-					upperBound = weight;
+				if(p.weight < upperBound) {
+					setSolution(p.weight, p.selected);
+					upperBound = p.weight;
 					Main.printDebug("It's getting warmer");
 				}
 			}
 		}
 	}
 	
+	/**
+	 * Überprüft anhand der bereits besuchten Knoten, ob die Kante e einen Kreis verursacht.
+	 * O(1)
+	 */
 	private boolean createsCircle(Edge e, BitSet visited) {
 		return visited.get(e.node1) && visited.get(e.node2);
 	}
 
+	/**
+	 * Liefert den noch unbesuchten (äußeren) Knoten einer Kante zurück.
+	 * O(1)
+	 */
 	private Vertex getOuterVertex(Edge e, BitSet visited) {
 		Vertex v = null;
-		if(visited.get(e.node1)) {
-			v = adjList[e.node2];
+		if(visited.get(e.node1) ^ visited.get(e.node2)) {
+			if(visited.get(e.node1)) {
+				v = adjList[e.node2];
+			}
+			else {
+				v = adjList[e.node1];
+			}
+			return v;
 		}
-		else {
-			v = adjList[e.node1];
-		}
-		return v;
+		return null;
 	}
 
+	/**
+	 * Berechnet das Gewicht einer Menge von Kanten.
+	 * O(k)
+	 */
 	private int getUpperBound(HashSet<Edge> solution) {
 		int weight = 0;
 		for(Edge e : solution) {
@@ -262,6 +327,9 @@ public class KMST extends AbstractKMST {
 		return weight;
 	}
 
+	/**
+	 * Ein Vertex ist eine Sammlung von Edges.
+	 */
 	class Vertex extends ArrayList<Edge> implements Comparable<Vertex> {
 		public final int node;
 		public int value = 0;
@@ -270,6 +338,10 @@ public class KMST extends AbstractKMST {
 			this.node = node;
 		}
 
+		/**
+		 * Löscht alle Kanten, die eine Verbindung zum Knoten mit Index node herstellen. 
+		 * O(m)
+		 */
 		public void removeNode(int node) {
 			LinkedList<Edge> blackList = new LinkedList<Edge>();
 			for(Edge e : this) {
